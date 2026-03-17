@@ -1,82 +1,26 @@
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis
 import os
 
-# Inicializar InsightFace
-app = FaceAnalysis(name="buffalo_l")
-app.prepare(ctx_id=0, det_size=(640, 640))
+from .embedding_generator import (
+    detect_faces,
+    generate_embedding
+)
 
-# Carpeta para guardar embeddings
+from .face_quality import (
+    is_blurry,
+    face_too_small
+)
+
+from .pose_utils import (
+    check_pose,
+    is_stable
+)
+
+# Carpeta de embeddings
 os.makedirs("embeddings", exist_ok=True)
 
 
-# -------------------------------
-# Verificar si la imagen es borrosa
-# -------------------------------
-def is_blurry(image):
-
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
-
-    return variance < 80
-
-
-# -------------------------------
-# Verificar si el rostro está muy lejos
-# -------------------------------
-def face_too_small(face):
-
-    x1, y1, x2, y2 = face.bbox.astype(int)
-
-    width = x2 - x1
-    height = y2 - y1
-
-    return width < 120 or height < 120
-
-
-# -------------------------------
-# Verificar pose
-# -------------------------------
-def check_pose(yaw, pose):
-
-    if pose == "front":
-        return abs(yaw) < 10
-
-    if pose == "left":
-        return yaw > 20
-
-    if pose == "right":
-        return yaw < -20
-
-    return False
-
-
-# -------------------------------
-# Verificar estabilidad de cabeza
-# -------------------------------
-def is_stable(face, last_bbox, last_yaw):
-
-    x1, y1, x2, y2 = face.bbox.astype(int)
-    pitch, yaw, roll = face.pose
-
-    current_bbox = np.array([x1, y1, x2, y2])
-
-    if last_bbox is None:
-        return False, current_bbox, yaw
-
-    bbox_diff = np.linalg.norm(current_bbox - last_bbox)
-    yaw_diff = abs(yaw - last_yaw)
-
-    if bbox_diff < 10 and yaw_diff < 3:
-        return True, current_bbox, yaw
-
-    return False, current_bbox, yaw
-
-
-# -------------------------------
-# Función principal de registro
-# -------------------------------
 def capture_face_embeddings(user_id):
 
     cap = cv2.VideoCapture(0)
@@ -111,7 +55,7 @@ def capture_face_embeddings(user_id):
             if not ret:
                 continue
 
-            faces = app.get(frame)
+            faces = detect_faces(frame)
 
             if len(faces) != 1:
 
@@ -132,12 +76,10 @@ def capture_face_embeddings(user_id):
             face = faces[0]
 
             pitch, yaw, roll = face.pose
-
             x1, y1, x2, y2 = face.bbox.astype(int)
 
             face_crop = frame[y1:y2, x1:x2]
 
-            # Verificar distancia
             if face_too_small(face):
 
                 cv2.putText(
@@ -154,7 +96,6 @@ def capture_face_embeddings(user_id):
                 cv2.waitKey(1)
                 continue
 
-            # Verificar borrosidad
             if is_blurry(face_crop):
 
                 cv2.putText(
@@ -171,7 +112,6 @@ def capture_face_embeddings(user_id):
                 cv2.waitKey(1)
                 continue
 
-            # Verificar pose correcta
             if not check_pose(yaw, pose_name):
 
                 cv2.putText(
@@ -188,7 +128,6 @@ def capture_face_embeddings(user_id):
                 cv2.waitKey(1)
                 continue
 
-            # Verificar estabilidad
             stable, last_bbox, last_yaw = is_stable(face, last_bbox, last_yaw)
 
             if stable:
@@ -212,13 +151,12 @@ def capture_face_embeddings(user_id):
                 cv2.waitKey(1)
                 continue
 
-            # Evitar capturar pose duplicada
             if captured_poses[pose_name]:
                 captured = True
                 continue
 
-            # Capturar embedding
-            embedding = face.embedding
+            embedding = generate_embedding(face)
+
             embeddings.append(embedding)
 
             captured_poses[pose_name] = True
