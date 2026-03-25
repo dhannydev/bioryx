@@ -1,20 +1,19 @@
 import numpy as np
 from .face_model import get_face_app
 
+# Inicializar UNA sola vez
+app = get_face_app()
+
 
 def detect_faces(frame):
-
-    app = get_face_app()
-    faces = app.get(frame)
-
-    return faces
+    return app.get(frame)
 
 
 def generate_embedding(face):
 
     embedding = face.embedding
 
-    # normalización L2 (MUY IMPORTANTE)
+    # normalización L2
     embedding = embedding / np.linalg.norm(embedding)
 
     return embedding.astype("float32")

@@ -9,15 +9,25 @@ from backend.app.face_engine.face_database import load_embeddings
 from backend.app.face_engine.faiss_index import FaceIndex
 
 
-def run_face_recognition():
+THRESHOLD = 0.55
 
-    embeddings, labels = load_embeddings()
+
+def run_face_recognition():
 
     index = FaceIndex()
 
-    index.build(embeddings, labels)
+    # Intentar cargar índice existente
+    if not index.load():
+        print("Construyendo índice por primera vez...")
+        embeddings, labels = load_embeddings()
+        index.build(embeddings, labels)
+    else:
+        print("Índice cargado desde disco")
 
     cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        raise Exception("No se pudo abrir la cámara")
 
     while True:
 
@@ -34,6 +44,9 @@ def run_face_recognition():
 
             results = index.search(embedding)
 
+            if len(results) == 0:
+                continue
+
             best_match = results[0]
 
             name = best_match["label"]
@@ -43,8 +56,7 @@ def run_face_recognition():
 
             x1, y1, x2, y2 = face.bbox.astype(int)
 
-            # threshold correcto para ArcFace
-            if score > 0.5:
+            if score > THRESHOLD:
                 label = f"{name} ({score:.2f})"
                 color = (0, 255, 0)
             else:
